@@ -1,0 +1,183 @@
+kind: "Template"
+apiVersion: "v1"
+metadata:
+  name: gitea-persistant
+  annotations:
+    openshift.io/display-name: "Gitea persistant"
+    tags: "git"
+labels:
+  app: ${APPLICATION_NAME}
+objects:
+  - kind: ServiceAccount
+    apiVersion: v1
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: ${APPLICATION_NAME}
+        name: ${APPLICATION_NAME}
+  - kind: Route
+    apiVersion: v1
+    metadata:
+      name: ${APPLICATION_NAME}
+    spec:
+      to:
+        kind: Service
+        name: ${APPLICATION_NAME}
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+  - kind: Service
+    apiVersion: v1
+    metadata:
+      name: ${APPLICATION_NAME}
+    spec:
+      ports:
+        - name: http
+          port: 80
+          protocol: tcp
+          targetport: 80
+    selector:
+      app: ${APPLICATION_NAME}
+      deploymentconfig: ${APPLICATION_NAME}
+  - kind: ImageStream
+    metadata:
+      name: ${APPLICATION_NAME}
+    spec:
+      tags:
+        - from:
+            kind: DockerImage
+            name: ${GITEA_REPOS_URL}:${GITEA_VERSION}
+          name: ${GITEA_VERSION}
+  - kind: DeploymentConfig
+    metadata:
+      name: ${APPLICATION_NAME}
+    spec:
+      replicas: 1
+      selector:
+        name: ${APPLICATION_NAME}
+      strategy:
+        type: Recreate
+      triggers:
+        - type: ConfigChange
+        - type: ImageChange
+        - imageChangeParams:
+          automatic: true
+          containersNames:
+            - ${APPLICATION_NAME}
+            from:
+              kind: ImageStreamTag
+              name: ${APPLICATION_NAME}:${GITEA_VERSION}
+        - type: ImageChange
+      template:
+        metadata:
+          labels:
+            deploymentconfig: ${APPLICATION_NAME}
+        spec:
+          serviceAccountName: ${APPLICATION_NAME}
+          containers:
+          - name: ${APPLICATION_NAME}
+            image: ''
+            imagePullPolicy: IfNotPresent
+            livenessProbe:
+              httpGet:
+                path: /
+                port: 80
+                scheme: HTTP
+              failureThreshold: 3
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 1
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /
+                port: 80
+                scheme: HTTP
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              successThreshold: 1
+            resources:
+              limits:
+                memory: 512Mi
+            volumeMounts:
+            - name: gitea-data
+              mountPath: /var/gitea
+            - name: gitea-config
+              mountPath: /home/gitea/conf
+            ports:
+            - containerPort: 80
+              protocol: TCP
+          dnsPolicy: ClusterFirst
+          restartPolicy: Always
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+          volumes:
+          - name: gitea-data
+            persistentVolumeClaim:
+              claimName: ${APPLICATION_NAME}-pv
+          - name: gitea-config
+            configMap:
+              name: gitea-config
+              items:
+                - key: app.ini
+                  path: app.ini
+  - kind: ConfigMap
+    apiVersion: v1
+    metadata:
+      name: gitea-config
+    data:
+      app.ini: |
+        RUN_USER = gitea
+        RUN_MODE = prod
+
+        [database]
+        DB_TYPE = sqlite3
+        PATH     = /var/gitea/sqlite3/gitea.db
+
+        [repository]
+        ROOT     = /var/gitea/repositories
+
+        [server]
+        SSH_DOMAIN       = ${HOSTNAME}
+        DOMAIN           = ${HOSTNAME}
+        HTTP_PORT        = 80
+        SSH_PORT         = 2022
+        ROOT_URL         = http://${HOSTNAME}
+        DISABLE_SSH      = false
+        START_SSH_SERVER = true
+        LFS_START_SERVER = false
+        OFFLINE_MODE     = false
+
+        [log]
+        MODE      = file
+        LEVEL     = Info
+        ROOT_PATH = /var/gitea/log
+
+  - kind: PersistentVolumeClaim
+    apiVersion: v1
+    metadata:
+      name: ${APPLICATION_NAME}-pv
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${GITEA_VOLUME_CAPACITY}
+parameters:
+  - description: The name of the application
+    name: APPLICATION_NAME
+    required: true
+    value: gitea
+  - description: The docker repos ul of the gitea image
+    name: GITEA_REPOS_URL
+    required: true
+    value:
+  - description: the gitea version 
+    name: GITEA_VERSION
+    required: true
+    value:
+  - description: Volume size for Gitea volume claim
+    name: GITEA_VOLUME_CAPACITY
+    required: true
+    value: 10Gi
