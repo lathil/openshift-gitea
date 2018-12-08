@@ -172,11 +172,11 @@ parameters:
   - description: The docker repos ul of the gitea image
     name: GITEA_REPOS_URL
     required: true
-    value:
+    value: docker.io/gitea/gitea
   - description: the gitea version 
     name: GITEA_VERSION
     required: true
-    value:
+    value: "latest"
   - description: Volume size for Gitea volume claim
     name: GITEA_VOLUME_CAPACITY
     required: true
