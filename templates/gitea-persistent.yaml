@@ -198,7 +198,7 @@ parameters:
   - description: The docker repos ul of the gitea image
     name: GITEA_REPOS_URL
     required: true
-    value: docker-registry.default.svc:5000/scm/gitea
+    value: docker.io/gitea/gitea:latest
   - description: the gitea version 
     name: GITEA_VERSION
     required: true
